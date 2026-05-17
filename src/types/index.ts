@@ -37,9 +37,10 @@ export type SpinResult = {
 };
 
 export type Reward = {
-  checkpoint: number;
-  claimed: boolean;
-  claimed_at?: string;
+  id: string;
+  player_id: string;
+  points: number;
+  claimed_at: string;
 };
 
 export type HistoryEntry = {
@@ -50,7 +51,16 @@ export type HistoryEntry = {
   created_at: string;
 };
 
+export type PaginatedMeta = {
+  total: number;
+  total_pages: number;
+  current_page: number;
+  limit: number;
+};
+
 // API response types
 export type LoginResponse = ApiResponse<LoginData>;
 export type ProfileResponse = ApiResponse<Player>;
 export type SpinResponse = ApiResponse<SpinResult>;
+export type RewardsResponse = ApiResponse<Reward[]>;
+export type ClaimRewardResponse = ApiResponse<Reward>;
