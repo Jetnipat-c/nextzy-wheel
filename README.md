@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nextzy Wheel — เกมสะสมคะแนน
 
-## Getting Started
+เว็บแอปพลิเคชันเกมหมุนวงล้อสะสมคะแนน พัฒนาด้วย Next.js 16 + Tailwind CSS เชื่อมต่อกับ Backend API
 
-First, run the development server:
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Styling | Tailwind CSS |
+| State Management | Zustand (player identity) |
+| Data Fetching | TanStack Query v5 |
+| Notifications | Sonner |
+
+## Installation
+
+**Prerequisites:** Node.js 18+, pnpm
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+สร้างไฟล์ `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3002
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm dev      # development
+pnpm build    # production build
+pnpm lint     # lint
+```
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/                  # Next.js App Router pages
+│   ├── page.tsx          # Landing — กรอกชื่อเพื่อเข้าเล่น
+│   ├── home/page.tsx     # Home — คะแนนสะสม, ประวัติ, รับรางวัล
+│   └── game/page.tsx     # Game — หมุนวงล้อ
+├── components/
+│   ├── layout/           # PageShell (h-screen layout)
+│   ├── ui/               # Shared UI (Modal, BottomBar, Spinner)
+│   ├── home/             # ScoreCard, TabBar, HistoryList, ClaimConfirmModal
+│   └── game/             # SpinWheel (SVG), SpinResultModal
+├── services/
+│   └── player-service.ts # API calls ทั้งหมด
+├── store/
+│   └── player-store.ts   # Zustand — เก็บ player id, username
+├── lib/
+│   ├── constants.ts      # WHEEL_SEGMENTS, CHECKPOINTS, MAX_SCORE
+│   └── api.ts            # Server-side fetch helper
+└── types/index.ts        # Shared types + ApiResponse<T>
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Data Flow
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Landing → login API → Zustand store (id, username)
+                ↓
+Home → useQuery(profile) → ScoreCard แสดงคะแนน + progress bar
+     → useQuery(rewards)  → แสดงปุ่มรับรางวัลตาม checkpoint
+     → useInfiniteQuery   → HistoryList (global / mine / rewards tab)
+                ↓
+Game → SpinWheel หมุน (requestAnimationFrame)
+     → กดหยุด → คำนวณ segment จาก rotation angle
+     → POST /spins { points }
+     → invalidateQueries(profile) → คะแนนอัปเดตอัตโนมัติ
+```
 
-## Deploy on Vercel
+### Key Design Decisions
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Player session ไม่ persist** — Zustand in-memory only หากรีเฟรชจะ redirect กลับ `/` เพื่อรองรับหลายคนต่อเครื่องเดียวกัน
+- **Spin result คำนวณ client-side** — rotation angle → segment index → ส่ง points ไป API
+- **Progress bar non-linear** — marker positions `[10%, 45%, 100%]` ไม่ตรงกับสัดส่วน threshold จริง จึงใช้ interpolation ให้ fill ตรงกับ marker เสมอ
+- **API calls ตรงจาก client** — ไม่ผ่าน Next.js API proxy เพราะ backend มี CORS และไม่มี secret
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Features
+
+### Landing (`/`)
+- กรอกชื่อผู้เล่น → เรียก login API → เข้าสู่หน้า Home
+- ชื่อซ้ำกับ CSV ที่ import ไว้ → ระบบรวมเป็นผู้เล่นคนเดียวกัน
+
+### Home (`/home`)
+- **ScoreCard** — แสดงคะแนนสะสม, progress bar พร้อม 3 checkpoint (500 / 1,000 / 10,000)
+- **Reward buttons** — กดรับรางวัลเมื่อถึง checkpoint, แสดง modal ยืนยัน, กดซ้ำไม่ได้
+- **HistoryList** — 3 tab: ประวัติทั่วโลก, ประวัติของฉัน, รางวัลของฉัน พร้อม infinite scroll
+
+### Game (`/game`)
+- **SpinWheel** — SVG วงล้อ 4 ช่อง (300 / 500 / 1,000 / 3,000 คะแนน)
+- กด "เริ่มหมุน" → วงล้อหมุน, กด "หยุด" → หยุดทันที คำนวณ segment ใต้เข็ม → บันทึกคะแนน
+- แสดง modal ผลคะแนน → กดปิดแล้วเล่นต่อได้เลย
