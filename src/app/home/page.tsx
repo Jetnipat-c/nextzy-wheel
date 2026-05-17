@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
-import Link from "next/link";
+import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { Reward } from "@/types";
+
 import { usePlayerStore } from "@/store/player-store";
+
 import { playerService } from "@/services/player-service";
-import { CHECKPOINTS, MAX_SCORE } from "@/lib/constants";
+
+import { Modal } from "@/components/ui/modal";
+import { BottomBar } from "@/components/ui/bottom-bar";
+import { TabBar, Tab } from "@/components/home/tab-bar";
+import { PageShell } from "@/components/layout/page-shell";
+import { HistoryList } from "@/components/home/history-list";
+import { ClaimConfirmModal } from "@/components/home/claim-confirm-modal";
+import { ScoreCard, ScoreCardSkeleton } from "@/components/home/score-card";
 
 const HomePage = () => {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { id: playerId } = usePlayerStore();
+  const [activeTab, setActiveTab] = useState<Tab>("global");
+  const [claimedReward, setClaimedReward] = useState<Reward | null>(null);
 
   useEffect(() => {
     if (!playerId) router.replace("/");
@@ -22,37 +36,52 @@ const HomePage = () => {
     enabled: !!playerId,
   });
 
-  if (!player) return null;
+  const { data: rewards = [] } = useQuery({
+    queryKey: ["rewards", playerId],
+    queryFn: () => playerService.getRewards(playerId!),
+    enabled: !!playerId,
+  });
 
-  const nextCheckpoint = CHECKPOINTS.find((cp) => player.total_points < cp.threshold);
-  const progressMax = nextCheckpoint?.threshold ?? MAX_SCORE;
-  const progressPct = Math.min((player.total_points / progressMax) * 100, 100);
+  const { mutate: claim } = useMutation({
+    mutationFn: (points: number) =>
+      playerService.claimReward(playerId!, points),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["rewards", playerId] });
+      setClaimedReward(data);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  if (!playerId) return null;
 
   return (
-    <main>
-      <p>{player.username}</p>
-      <p>คะแนนสะสม: {player.total_points} / {MAX_SCORE}</p>
-      <p>progress: {progressPct.toFixed(1)}%</p>
+    <PageShell
+      bottom={
+        <BottomBar label="ไปเล่นเกม" onClick={() => router.push("/game")} />
+      }
+    >
+      {player ? (
+        <ScoreCard
+          player={player}
+          rewards={rewards}
+          onClaim={(points) => claim(points)}
+        />
+      ) : (
+        <ScoreCardSkeleton />
+      )}
+      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <HistoryList playerId={playerId!} activeTab={activeTab} />
 
-      <section>
-        <h2>รางวัล</h2>
-        {CHECKPOINTS.map((cp) => {
-          const reached = player.total_points >= cp.threshold;
-          return (
-            <div key={cp.threshold}>
-              <span>{cp.label} ({cp.threshold} คะแนน)</span>
-              {reached ? (
-                <button>รับรางวัล</button>
-              ) : (
-                <span>ล็อก</span>
-              )}
-            </div>
-          );
-        })}
-      </section>
-
-      <Link href="/game">ไปเล่นเกม</Link>
-    </main>
+      <Modal
+        isOpen={claimedReward !== null}
+        onClose={() => setClaimedReward(null)}
+      >
+        <ClaimConfirmModal
+          reward={claimedReward!}
+          onClose={() => setClaimedReward(null)}
+        />
+      </Modal>
+    </PageShell>
   );
 };
 
