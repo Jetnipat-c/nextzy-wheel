@@ -9,7 +9,7 @@ type PageShellProps = {
 
 export const PageShell = ({ children, bottom, className, containerClassName }: PageShellProps) => (
   <div className={cn("flex flex-col h-screen", containerClassName)}>
-    <div className={cn("flex-1 overflow-hidden flex flex-col", className)}>{children}</div>
+    <main className={cn("flex-1 overflow-hidden flex flex-col", className)}>{children}</main>
     {bottom && <div className="sticky bottom-0">{bottom}</div>}
   </div>
 );
