@@ -43,7 +43,6 @@ const LandingPage = () => {
           <InputField
             label="ชื่อสำหรับเล่น (Nickname)"
             name="username"
-            defaultValue="Demo2"
             required
           />
         </form>
